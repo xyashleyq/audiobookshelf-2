@@ -234,6 +234,8 @@
 </template>
 
 <script>
+import { merge, isEmpty, FIELD_CONFIG, TARGET_ROOT } from '@/utils/metadataMerge'
+
 export default {
   props: {
     processing: Boolean,
@@ -363,6 +365,20 @@ export default {
     },
     tags() {
       return this.filterData.tags || []
+    },
+    /**
+     * Merge results for the checked merge fields (see utils/metadataMerge).
+     * Single source of truth for the payload. Do not mutate: values can be the item's own arrays.
+     */
+    mergeResults() {
+      if (!this.selectedMatch) return {}
+      const existing = {}
+      const modes = {}
+      for (const field in FIELD_CONFIG) {
+        existing[field] = field === 'tags' ? this.media.tags : this.mediaMetadata[field]
+        if (this.selectedMatchUsage[field]) modes[field] = 'replace'
+      }
+      return merge(existing, this.selectedMatch, modes)
     }
   },
   methods: {
@@ -570,6 +586,8 @@ export default {
       updatePayload.metadata = {}
 
       for (const key in this.selectedMatchUsage) {
+        // Merge fields are added from mergeResults below
+        if (FIELD_CONFIG[key]) continue
         if (this.selectedMatchUsage[key] && this.selectedMatch[key]) {
           if (key === 'series') {
             if (!Array.isArray(this.selectedMatch[key])) {
@@ -603,15 +621,24 @@ export default {
             updatePayload.metadata.authors = authorPayload
           } else if (key === 'narrator') {
             updatePayload.metadata.narrators = this.selectedMatch[key]
-          } else if (key === 'genres') {
-            updatePayload.metadata.genres = [...this.selectedMatch[key]]
-          } else if (key === 'tags') {
-            updatePayload.tags = this.selectedMatch[key]
           } else if (key === 'itunesId') {
             updatePayload.metadata.itunesId = Number(this.selectedMatch[key])
           } else {
             updatePayload.metadata[key] = this.selectedMatch[key]
           }
+        }
+      }
+
+      for (const field in this.mergeResults) {
+        const config = FIELD_CONFIG[field]
+        // Only fields with a non-empty new value are sent, as before
+        if (isEmpty(config.type, this.selectedMatch[field])) continue
+        const value = this.mergeResults[field].value
+        const payloadValue = Array.isArray(value) ? [...value] : value
+        if (config.target === TARGET_ROOT) {
+          updatePayload[field] = payloadValue
+        } else {
+          updatePayload.metadata[field] = payloadValue
         }
       }
 
