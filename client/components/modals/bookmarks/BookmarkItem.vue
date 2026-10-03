@@ -19,9 +19,12 @@
           </div>
         </form>
       </template>
-      <p v-else class="pl-2 pr-2 truncate">{{ bookmark.title }}</p>
+      <template v-else>
+        <p v-if="bookTitle" data-testid="bookmark-book-title" class="pl-2 pr-2 text-xs text-gray-400 truncate">{{ bookTitle }}</p>
+        <p class="pl-2 pr-2 truncate">{{ bookmark.title }}</p>
+      </template>
     </div>
-    <div v-if="!isEditing" class="h-full flex items-center justify-end transform" :class="isHovering ? 'transition-transform translate-0 w-16' : 'translate-x-40 w-0'">
+    <div v-if="!isEditing && !readOnly" class="h-full flex items-center justify-end transform" :class="isHovering ? 'transition-transform translate-0 w-16' : 'translate-x-40 w-0'">
       <span class="material-symbols text-xl mr-2 text-gray-200 hover:text-yellow-400" @click.stop="editClick">edit</span>
       <span class="material-symbols text-xl text-gray-200 hover:text-error cursor-pointer" @click.stop="deleteClick">delete</span>
     </div>
@@ -36,7 +39,12 @@ export default {
       default: () => {}
     },
     highlight: Boolean,
-    playbackRate: Number
+    playbackRate: Number,
+    readOnly: Boolean,
+    bookTitle: {
+      type: String,
+      default: null
+    }
   },
   data() {
     return {
@@ -49,13 +57,13 @@ export default {
     wrapperClass() {
       var classes = []
       if (this.highlight) classes.push('bg-bg/60')
-      if (!this.isEditing) classes.push('cursor-pointer')
+      if (!this.isEditing && !this.readOnly) classes.push('cursor-pointer')
       return classes.join(' ')
     }
   },
   methods: {
     mouseover() {
-      if (this.isEditing) return
+      if (this.isEditing || this.readOnly) return
       this.isHovering = true
     },
     mouseleave() {
@@ -73,6 +81,7 @@ export default {
       this.$emit('delete', this.bookmark)
     },
     editClick() {
+      if (this.readOnly) return
       this.newBookmarkTitle = this.bookmark.title
       this.isEditing = true
       this.isHovering = false
