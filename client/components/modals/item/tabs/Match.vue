@@ -248,7 +248,7 @@
 </template>
 
 <script>
-import { merge, isEmpty, FIELD_CONFIG, TARGET_ROOT, LIST } from '@/utils/metadataMerge'
+import { merge, FIELD_CONFIG, TARGET_ROOT, LIST } from '@/utils/metadataMerge'
 
 function defaultMergeModes() {
   const modes = {}
@@ -701,9 +701,10 @@ export default {
       }
 
       for (const field in this.mergeResults) {
+        // Unchanged fields are not sent (shown as "no change" in the preview).
+        // An empty new value keeps the item's own value, so it is never changed either
+        if (!this.mergeResults[field].changed) continue
         const config = FIELD_CONFIG[field]
-        // Only fields with a non-empty new value are sent, as before
-        if (isEmpty(config.type, this.selectedMatch[field])) continue
         const value = this.mergeResults[field].value
         const payloadValue = Array.isArray(value) ? [...value] : value
         if (config.target === TARGET_ROOT) {
@@ -717,7 +718,10 @@ export default {
     },
     async submitMatchUpdate() {
       var updatePayload = this.buildMatchUpdatePayload()
-      if (!Object.keys(updatePayload).length) {
+      // Nothing to update: no metadata keys and no other keys (tags, etc.). Send no request
+      const hasOtherKeys = Object.keys(updatePayload).some((key) => key !== 'metadata')
+      if (!hasOtherKeys && !Object.keys(updatePayload.metadata).length) {
+        this.$toast.info(this.$strings.ToastNoUpdatesNecessary)
         return
       }
 
