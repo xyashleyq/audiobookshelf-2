@@ -177,9 +177,75 @@ function diffBookmarks(existing, incoming) {
   }
 }
 
+/**
+ * Apply an import to a user object. This is the only function here that touches the user.
+ *
+ * Builds the full replacement array in a local variable and assigns it once.
+ * Does NOT save; the caller saves (and handles save failure). If nothing would change,
+ * the user is not touched and `changed` is false so the caller can skip the save.
+ *
+ * - keep:    adds new entries only
+ * - replace: adds new entries and overwrites the title of entries flagged as conflicts
+ * Bookmarks the file doesn't mention, and other books' bookmarks, are never altered.
+ * The destination book always comes from `libraryItemId`, never from the file.
+ *
+ * @param {{bookmarks: object[]|null, changed: Function}} user
+ * @param {string} libraryItemId
+ * @param {ParsedBookmark[]} incoming - entries from parseBookmarkFile
+ * @param {'keep'|'replace'} mode
+ * @param {number} [now] - used as createdAt for entries that have none
+ * @returns {{added:number,replaced:number,keptExisting:number,identical:number,supersededInFile:number,changed:boolean}}
+ */
+function applyBookmarkImport(user, libraryItemId, incoming, mode, now = Date.now()) {
+  if (mode !== 'keep' && mode !== 'replace') {
+    throw new Error(`Invalid import mode "${mode}"`)
+  }
+
+  const allBookmarks = user.bookmarks || []
+  const diff = diffBookmarks(selectBookmarksForItem(allBookmarks, libraryItemId), incoming)
+
+  const newEntries = diff.entries.filter((e) => e.status === 'new')
+  const conflicts = diff.entries.filter((e) => e.status === 'conflict')
+
+  const titleToApplyByTime = new Map()
+  if (mode === 'replace') {
+    conflicts.forEach((e) => titleToApplyByTime.set(e.time, e.title))
+  }
+
+  const summary = {
+    added: newEntries.length,
+    replaced: titleToApplyByTime.size,
+    keptExisting: mode === 'keep' ? conflicts.length : 0,
+    identical: diff.counts.identical,
+    supersededInFile: diff.counts.supersededInFile,
+    changed: newEntries.length > 0 || titleToApplyByTime.size > 0
+  }
+  if (!summary.changed) return summary
+
+  const nextBookmarks = allBookmarks.map((bm) => {
+    if (bm.libraryItemId === libraryItemId && titleToApplyByTime.has(Number(bm.time))) {
+      return { ...bm, title: titleToApplyByTime.get(Number(bm.time)) }
+    }
+    return bm
+  })
+  for (const entry of newEntries) {
+    nextBookmarks.push({
+      libraryItemId,
+      time: entry.time,
+      title: entry.title,
+      createdAt: entry.createdAt ?? now
+    })
+  }
+
+  user.bookmarks = nextBookmarks
+  user.changed('bookmarks', true)
+  return summary
+}
+
 module.exports = {
   SUPPORTED_VERSION,
   parseBookmarkFile,
   selectBookmarksForItem,
-  diffBookmarks
+  diffBookmarks,
+  applyBookmarkImport
 }

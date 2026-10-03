@@ -1,5 +1,6 @@
 const { expect } = require('chai')
-const { parseBookmarkFile, diffBookmarks, SUPPORTED_VERSION } = require('../../../server/utils/bookmarkImport')
+const sinon = require('sinon')
+const { parseBookmarkFile, diffBookmarks, applyBookmarkImport, SUPPORTED_VERSION } = require('../../../server/utils/bookmarkImport')
 
 function validFile(overrides = {}) {
   return {
@@ -228,5 +229,147 @@ describe('bookmarkImport.diffBookmarks', () => {
     diffBookmarks(existing, incoming)
     expect(existing).to.deep.equal(existingSnapshot)
     expect(incoming).to.deep.equal(incomingSnapshot)
+  })
+})
+
+describe('bookmarkImport.applyBookmarkImport', () => {
+  function makeUser(bookmarks) {
+    return { bookmarks, changed: sinon.spy() }
+  }
+  const entry = (time, title, createdAt = null) => ({ time, title, createdAt })
+
+  function baseBookmarks() {
+    return [
+      { libraryItemId: 'li_1', time: 10, title: 'A', createdAt: 1 },
+      { libraryItemId: 'li_1', time: 20, title: 'B', createdAt: 2 },
+      { libraryItemId: 'li_1', time: 99, title: 'Not in file', createdAt: 3 },
+      { libraryItemId: 'li_2', time: 10, title: 'Other book', createdAt: 4 }
+    ]
+  }
+
+  it('keep: adds only new entries and leaves conflicts alone', () => {
+    const user = makeUser(baseBookmarks())
+    const summary = applyBookmarkImport(user, 'li_1', [entry(5, 'new', 50), entry(20, 'Changed'), entry(10, 'A')], 'keep', 1000)
+    expect(summary).to.deep.include({ added: 1, replaced: 0, keptExisting: 1, identical: 1, changed: true })
+    expect(user.bookmarks.find((b) => b.libraryItemId === 'li_1' && b.time === 20).title).to.equal('B')
+    expect(user.bookmarks.find((b) => b.time === 5)).to.deep.equal({ libraryItemId: 'li_1', time: 5, title: 'new', createdAt: 50 })
+    expect(user.bookmarks).to.have.lengthOf(5)
+    expect(user.changed.calledOnceWithExactly('bookmarks', true)).to.be.true
+  })
+
+  it('replace: overwrites only flagged conflicts, preserving their createdAt', () => {
+    const user = makeUser(baseBookmarks())
+    const summary = applyBookmarkImport(user, 'li_1', [entry(20, 'Changed'), entry(10, 'A')], 'replace')
+    expect(summary).to.deep.include({ added: 0, replaced: 1, keptExisting: 0, identical: 1, changed: true })
+    const replaced = user.bookmarks.find((b) => b.libraryItemId === 'li_1' && b.time === 20)
+    expect(replaced).to.deep.equal({ libraryItemId: 'li_1', time: 20, title: 'Changed', createdAt: 2 })
+  })
+
+  it('replace: leaves bookmarks the file does not mention untouched (same object)', () => {
+    const original = baseBookmarks()
+    const unmentioned = original[2]
+    const user = makeUser(original)
+    applyBookmarkImport(user, 'li_1', [entry(20, 'Changed')], 'replace')
+    expect(user.bookmarks).to.include(unmentioned)
+  })
+
+  it("never changes another book's bookmarks, even at the same time", () => {
+    const original = baseBookmarks()
+    const otherBook = original[3]
+    const user = makeUser(original)
+    applyBookmarkImport(user, 'li_1', [entry(10, 'Overwrite attempt')], 'replace')
+    expect(user.bookmarks).to.include(otherBook)
+    expect(otherBook.title).to.equal('Other book')
+  })
+
+  it('uses the libraryItemId argument for new entries, not anything from the file', () => {
+    const user = makeUser([])
+    applyBookmarkImport(user, 'li_9', [{ ...entry(1, 'x'), libraryItemId: 'li_evil' }], 'keep')
+    expect(user.bookmarks[0].libraryItemId).to.equal('li_9')
+  })
+
+  it('uses now for entries without createdAt', () => {
+    const user = makeUser([])
+    applyBookmarkImport(user, 'li_1', [entry(1, 'x', null)], 'keep', 777)
+    expect(user.bookmarks[0].createdAt).to.equal(777)
+  })
+
+  it('builds a new array and does not mutate the previous one or its objects', () => {
+    const original = baseBookmarks()
+    const snapshot = JSON.parse(JSON.stringify(original))
+    const user = makeUser(original)
+    applyBookmarkImport(user, 'li_1', [entry(20, 'Changed'), entry(5, 'new')], 'replace')
+    expect(user.bookmarks).to.not.equal(original)
+    expect(original).to.deep.equal(snapshot)
+  })
+
+  it('does not touch the user when nothing would change', () => {
+    const original = baseBookmarks()
+    const user = makeUser(original)
+    const summary = applyBookmarkImport(user, 'li_1', [entry(10, 'A'), entry(20, 'B')], 'replace')
+    expect(summary.changed).to.be.false
+    expect(user.bookmarks).to.equal(original)
+    expect(user.changed.called).to.be.false
+  })
+
+  it('keep with only conflicts changes nothing', () => {
+    const user = makeUser(baseBookmarks())
+    const summary = applyBookmarkImport(user, 'li_1', [entry(20, 'Changed')], 'keep')
+    expect(summary).to.deep.include({ changed: false, keptExisting: 1 })
+    expect(user.changed.called).to.be.false
+  })
+
+  it('handles a user with null bookmarks', () => {
+    const user = makeUser(null)
+    applyBookmarkImport(user, 'li_1', [entry(1, 'x')], 'keep')
+    expect(user.bookmarks).to.have.lengthOf(1)
+  })
+
+  it('last duplicate in the file wins', () => {
+    const user = makeUser([])
+    const summary = applyBookmarkImport(user, 'li_1', [entry(5, 'first'), entry(5, 'second')], 'keep')
+    expect(summary).to.deep.include({ added: 1, supersededInFile: 1 })
+    expect(user.bookmarks[0].title).to.equal('second')
+  })
+
+  it('throws on an invalid mode and writes nothing', () => {
+    const original = baseBookmarks()
+    const user = makeUser(original)
+    expect(() => applyBookmarkImport(user, 'li_1', [entry(1, 'x')], 'merge')).to.throw('Invalid import mode')
+    expect(user.bookmarks).to.equal(original)
+    expect(user.changed.called).to.be.false
+  })
+
+  describe('round trip and idempotency', () => {
+    const original = [
+      { libraryItemId: 'li_1', time: 90.5, title: 'Listened at 1.5x', createdAt: 111 },
+      { libraryItemId: 'li_1', time: 0, title: 'Start', createdAt: 222 }
+    ]
+
+    it('export shape -> JSON -> parse -> apply into an empty book reproduces the bookmarks exactly', () => {
+      const exported = {
+        absBookmarksVersion: 1,
+        libraryItemId: 'li_1',
+        bookTitle: 'B',
+        exportedAt: 5,
+        bookmarks: original.map(({ time, title, createdAt }) => ({ time, title, createdAt }))
+      }
+      const parsed = parseBookmarkFile(JSON.parse(JSON.stringify(exported)))
+      expect(parsed.ok).to.be.true
+      const user = makeUser([])
+      applyBookmarkImport(user, 'li_1', parsed.entries, 'keep')
+      expect(user.bookmarks).to.deep.equal(original)
+    })
+
+    it('importing the same file twice: second run is all identical and writes nothing', () => {
+      const entries = original.map(({ time, title, createdAt }) => ({ time, title, createdAt }))
+      const user = makeUser([])
+      applyBookmarkImport(user, 'li_1', entries, 'replace')
+      const afterFirst = user.bookmarks
+      const second = applyBookmarkImport(user, 'li_1', entries, 'replace')
+      expect(second).to.deep.include({ added: 0, replaced: 0, identical: 2, changed: false })
+      expect(user.bookmarks).to.equal(afterFirst)
+      expect(user.changed.calledOnce).to.be.true
+    })
   })
 })
