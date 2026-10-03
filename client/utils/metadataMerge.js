@@ -24,7 +24,7 @@ export const FIELD_CONFIG = {
 }
 
 /**
- * Text: null, missing, non-string or whitespace only.
+ * Text: null, missing, whitespace only, or a non-string other than a finite number.
  * List: null, missing, non-array, or no non-empty items.
  */
 export function isEmpty(type, value) {
@@ -32,12 +32,16 @@ export function isEmpty(type, value) {
   return normalizeText(value) === ''
 }
 
-/** Trim. Non-string values count as empty. */
+/**
+ * Trim. A finite number becomes a string (the server stores String(n)), so 0 is "0", not empty.
+ * Every other non-string (null, undefined, boolean, object, NaN, Infinity) counts as empty.
+ */
 export function normalizeText(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : ''
   return typeof value === 'string' ? value.trim() : ''
 }
 
-/** Trim each item and drop empty ones. Non-array values and non-string items count as empty. */
+/** Trim each item and drop empty ones. Non-array values count as empty; items follow normalizeText. */
 export function normalizeList(value) {
   if (!Array.isArray(value)) return []
   return value.map(normalizeText).filter((item) => item !== '')

@@ -151,6 +151,45 @@ describe('metadataMerge', () => {
     })
   })
 
+  describe('numbers from the provider', () => {
+    it('replace, text: new 18 over "x" gives "18"', () => {
+      const r = merge({ publisher: 'x' }, { publisher: 18 }, { publisher: 'replace' })
+      expect(r.publisher).to.deep.equal({ value: '18', action: 'replace', changed: true })
+    })
+
+    it('replace, text: new 18 over "18" is unchanged', () => {
+      const r = merge({ publisher: '18' }, { publisher: 18 }, { publisher: 'replace' })
+      expect(r.publisher).to.deep.equal({ value: '18', action: 'replace', changed: false })
+    })
+
+    it('fillEmpty: new 18 over "" gives "18"', () => {
+      const r = merge({ subtitle: '' }, { subtitle: 18 }, { subtitle: 'fillEmpty' })
+      expect(r.subtitle).to.deep.equal({ value: '18', action: 'fillEmpty', changed: true })
+    })
+
+    it('new 0 gives "0" and is not empty', () => {
+      const r = merge({ title: 'x' }, { title: 0 }, { title: 'replace' })
+      expect(r.title).to.deep.equal({ value: '0', action: 'replace', changed: true })
+    })
+
+    it('NaN, Infinity, true and {} count as empty and keep the original', () => {
+      for (const bad of [NaN, Infinity, true, {}]) {
+        const r = merge({ title: 'Mine' }, { title: bad }, { title: 'replace' })
+        expect(r.title, String(bad)).to.deep.equal({ value: 'Mine', action: 'replace', changed: false })
+      }
+    })
+
+    it('replace, list: [2024, "Fantasy"] gives ["2024", "Fantasy"]', () => {
+      const r = merge({ genres: [] }, { genres: [2024, 'Fantasy'] }, { genres: 'replace' })
+      expect(r.genres).to.deep.equal({ value: ['2024', 'Fantasy'], action: 'replace', changed: true })
+    })
+
+    it('appendUnique: new [2024] onto ["2024"] is a duplicate', () => {
+      const r = merge({ tags: ['2024'] }, { tags: [2024] }, { tags: 'appendUnique' })
+      expect(r.tags).to.deep.equal({ value: ['2024'], action: 'appendUnique', changed: false })
+    })
+  })
+
   describe('merge logic not allowed for the field', () => {
     it('uses the default (replace) for fillEmpty on a list', () => {
       const r = merge({ genres: ['Old'] }, { genres: ['New'] }, { genres: 'fillEmpty' })
