@@ -1,5 +1,5 @@
 const { expect } = require('chai')
-const { parseBookmarkFile, SUPPORTED_VERSION } = require('../../../server/utils/bookmarkImport')
+const { parseBookmarkFile, diffBookmarks, SUPPORTED_VERSION } = require('../../../server/utils/bookmarkImport')
 
 function validFile(overrides = {}) {
   return {
@@ -160,5 +160,73 @@ describe('bookmarkImport.parseBookmarkFile', () => {
       expect(result.errors).to.have.lengthOf(21)
       expect(result.errors[20]).to.match(/and \d+ more errors/)
     })
+  })
+})
+
+describe('bookmarkImport.diffBookmarks', () => {
+  const existing = [
+    { libraryItemId: 'li_1', time: 10, title: 'A', createdAt: 1 },
+    { libraryItemId: 'li_1', time: 20, title: 'B', createdAt: 2 }
+  ]
+
+  it('classifies new, identical and conflict', () => {
+    const result = diffBookmarks(existing, [
+      { time: 5, title: 'fresh', createdAt: null },
+      { time: 10, title: 'A', createdAt: null },
+      { time: 20, title: 'Different', createdAt: null }
+    ])
+    expect(result.entries.map((e) => e.status)).to.deep.equal(['new', 'identical', 'conflict'])
+    expect(result.entries[2].existingTitle).to.equal('B')
+    expect(result.entries[0].existingTitle).to.equal(null)
+    expect(result.counts).to.deep.equal({ total: 3, new: 1, identical: 1, conflict: 1, supersededInFile: 0 })
+  })
+
+  it('treats everything as new when there are no existing bookmarks', () => {
+    const result = diffBookmarks([], [{ time: 1, title: 'x', createdAt: null }])
+    expect(result.counts.new).to.equal(1)
+  })
+
+  it('returns empty results for empty incoming', () => {
+    const result = diffBookmarks(existing, [])
+    expect(result.entries).to.deep.equal([])
+    expect(result.counts.total).to.equal(0)
+  })
+
+  it('last entry wins when the file repeats a time, and the earlier one is flagged', () => {
+    const result = diffBookmarks(existing, [
+      { time: 30, title: 'first', createdAt: 1 },
+      { time: 30, title: 'second', createdAt: 2 }
+    ])
+    expect(result.entries).to.have.lengthOf(1)
+    expect(result.entries[0].title).to.equal('second')
+    expect(result.supersededInFile).to.deep.equal([{ time: 30, title: 'first', createdAt: 1 }])
+    expect(result.counts.supersededInFile).to.equal(1)
+  })
+
+  it('compares the winning duplicate (not the superseded one) against existing', () => {
+    const result = diffBookmarks(existing, [
+      { time: 10, title: 'Other', createdAt: null },
+      { time: 10, title: 'A', createdAt: null }
+    ])
+    expect(result.entries[0].status).to.equal('identical')
+  })
+
+  it('compares titles exactly (case and whitespace sensitive)', () => {
+    const result = diffBookmarks(existing, [{ time: 10, title: 'a', createdAt: null }])
+    expect(result.entries[0].status).to.equal('conflict')
+  })
+
+  it('compares times numerically, so a stored string time still matches', () => {
+    const result = diffBookmarks([{ time: '10', title: 'A' }], [{ time: 10, title: 'A', createdAt: null }])
+    expect(result.entries[0].status).to.equal('identical')
+  })
+
+  it('does not mutate its inputs', () => {
+    const incoming = [{ time: 10, title: 'Z', createdAt: null }]
+    const existingSnapshot = JSON.parse(JSON.stringify(existing))
+    const incomingSnapshot = JSON.parse(JSON.stringify(incoming))
+    diffBookmarks(existing, incoming)
+    expect(existing).to.deep.equal(existingSnapshot)
+    expect(incoming).to.deep.equal(incomingSnapshot)
   })
 })

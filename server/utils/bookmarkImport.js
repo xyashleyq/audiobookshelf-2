@@ -100,7 +100,86 @@ function parseBookmarkFile(input) {
   }
 }
 
+/**
+ * Bookmarks belonging to one book. Shared by the preview and apply paths so
+ * both always look at exactly the same set.
+ *
+ * @param {{libraryItemId: string}[]|null|undefined} bookmarks - all of a user's bookmarks
+ * @param {string} libraryItemId
+ */
+function selectBookmarksForItem(bookmarks, libraryItemId) {
+  return (bookmarks || []).filter((bm) => bm.libraryItemId === libraryItemId)
+}
+
+/**
+ * @typedef DiffEntry
+ * @property {number} time
+ * @property {string} title
+ * @property {number|null} createdAt
+ * @property {'new'|'identical'|'conflict'} status
+ * @property {string|null} existingTitle - title already stored at this time (null when new)
+ *
+ * @typedef DiffResult
+ * @property {DiffEntry[]} entries - effective incoming entries (after in-file de-duplication)
+ * @property {ParsedBookmark[]} supersededInFile - earlier entries dropped because a later entry has the same time
+ * @property {{total:number,new:number,identical:number,conflict:number,supersededInFile:number}} counts
+ */
+
+/**
+ * Compare incoming entries against the destination book's existing bookmarks.
+ * Identity is exact numeric equality of `time`.
+ * If two incoming entries share a time, the last wins and the earlier is reported in supersededInFile.
+ *
+ * @param {{time:number,title:string}[]} existing - bookmarks of the destination book only
+ * @param {ParsedBookmark[]} incoming
+ * @returns {DiffResult}
+ */
+function diffBookmarks(existing, incoming) {
+  const existingByTime = new Map()
+  for (const bm of existing || []) {
+    const key = Number(bm.time)
+    if (!existingByTime.has(key)) existingByTime.set(key, bm) // first match, like User.findBookmark
+  }
+
+  const lastIndexByTime = new Map()
+  incoming.forEach((entry, index) => lastIndexByTime.set(entry.time, index))
+
+  const entries = []
+  const supersededInFile = []
+  incoming.forEach((entry, index) => {
+    if (lastIndexByTime.get(entry.time) !== index) {
+      supersededInFile.push({ ...entry })
+      return
+    }
+    const match = existingByTime.get(entry.time)
+    let status = 'new'
+    if (match) status = match.title === entry.title ? 'identical' : 'conflict'
+    entries.push({
+      time: entry.time,
+      title: entry.title,
+      createdAt: entry.createdAt,
+      status,
+      existingTitle: match ? match.title : null
+    })
+  })
+
+  const count = (status) => entries.filter((e) => e.status === status).length
+  return {
+    entries,
+    supersededInFile,
+    counts: {
+      total: entries.length,
+      new: count('new'),
+      identical: count('identical'),
+      conflict: count('conflict'),
+      supersededInFile: supersededInFile.length
+    }
+  }
+}
+
 module.exports = {
   SUPPORTED_VERSION,
-  parseBookmarkFile
+  parseBookmarkFile,
+  selectBookmarksForItem,
+  diffBookmarks
 }
