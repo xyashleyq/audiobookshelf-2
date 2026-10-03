@@ -7,6 +7,7 @@ const { sort } = require('../libs/fastSort')
 const { toNumber, isNullOrNaN, isUUID } = require('../utils/index')
 const userStats = require('../utils/queries/userStats')
 const parseUserAgent = require('../utils/parsers/parseUserAgent')
+const { parseBookmarkFile, diffBookmarks, applyBookmarkImport, selectBookmarksForItem } = require('../utils/bookmarkImport')
 
 /**
  * @typedef RequestUserObject
@@ -144,6 +145,40 @@ class MeController {
 
     const bookmarks = req.user.bookmarks?.filter((bookmark) => bookmark.libraryItemId === libraryItem.id).map((bookmark) => ({ ...bookmark })) || []
     res.json({ bookmarks })
+  }
+
+  /**
+   * Shared by the bookmark import preview and import handlers.
+   * Same lookup + access check as getBookmarksForLibraryItem.
+   * Sends the error response itself and returns null when the request can't proceed.
+   *
+   * Static because route handlers are bound to the ApiRouter instance, so `this`
+   * is not the controller. Call it as MeController.getLibraryItemForBookmarkImport(...).
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   * @param {string} action - for logging
+   * @returns {Promise<import('../models/LibraryItem')|null>}
+   */
+  static async getLibraryItemForBookmarkImport(req, res, action) {
+    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.libraryItemId)
+    if (!libraryItem) {
+      res.sendStatus(404)
+      return null
+    }
+
+    if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
+      Logger.error(`[MeController] User "${req.user.username}" attempted to ${action} bookmarks for library item "${req.params.libraryItemId}" without access`)
+      res.sendStatus(403)
+      return null
+    }
+
+    if (libraryItem.isPodcast) {
+      res.status(400).send('Bookmarks can only be imported into books')
+      return null
+    }
+
+    return libraryItem
   }
 
   /**
@@ -421,6 +456,75 @@ class MeController {
 
     SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
     res.sendStatus(200)
+  }
+
+  /**
+   * POST: /api/me/item/:libraryItemId/bookmarks/import/preview
+   * Writes nothing.
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async previewBookmarkImport(req, res) {
+    const libraryItem = await MeController.getLibraryItemForBookmarkImport(req, res, 'preview import of')
+    if (!libraryItem) return
+
+    const parsed = parseBookmarkFile(req.body?.file)
+    if (!parsed.ok) {
+      return res.status(400).json({ errors: parsed.errors })
+    }
+
+    const diff = diffBookmarks(selectBookmarksForItem(req.user.bookmarks, libraryItem.id), parsed.entries)
+    res.json({ hints: parsed.hints, ...diff })
+  }
+
+  /**
+   * POST: /api/me/item/:libraryItemId/bookmarks/import
+   * Body: { file: <parsed bookmarks file>, mode: 'keep' | 'replace' }
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async importBookmarks(req, res) {
+    const libraryItem = await MeController.getLibraryItemForBookmarkImport(req, res, 'import')
+    if (!libraryItem) return
+
+    const mode = req.body?.mode
+    if (mode !== 'keep' && mode !== 'replace') {
+      return res.status(400).json({ errors: ['"mode" must be "keep" or "replace"'] })
+    }
+
+    const parsed = parseBookmarkFile(req.body?.file)
+    if (!parsed.ok) {
+      return res.status(400).json({ errors: parsed.errors })
+    }
+
+    const previousBookmarks = req.user.bookmarks
+    let summary
+    try {
+      summary = applyBookmarkImport(req.user, libraryItem.id, parsed.entries, mode)
+      if (summary.changed) {
+        await req.user.save()
+      }
+    } catch (error) {
+      Logger.error(`[MeController] importBookmarks failed for library item "${libraryItem.id}"`, error)
+      // Don't leave a half-applied import in memory
+      try {
+        await req.user.reload()
+      } catch (reloadError) {
+        Logger.error(`[MeController] importBookmarks failed to reload user, restoring previous bookmarks`, reloadError)
+        req.user.bookmarks = previousBookmarks
+      }
+      return res.status(500).send('Failed to import bookmarks')
+    }
+
+    if (summary.changed) {
+      SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    }
+    res.json({
+      summary,
+      bookmarks: selectBookmarksForItem(req.user.bookmarks, libraryItem.id).map((bm) => ({ ...bm }))
+    })
   }
 
   /**
