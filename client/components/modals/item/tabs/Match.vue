@@ -59,6 +59,7 @@
           <ui-checkbox v-model="selectedMatchUsage.title" checkbox-bg="bg" @input="checkboxToggled" />
           <div class="grow ml-4">
             <ui-text-input-with-label v-model="selectedMatch.title" :disabled="!selectedMatchUsage.title" :label="$strings.LabelTitle" />
+            <ui-checkbox :value="isAltMergeMode('title')" :disabled="!selectedMatchUsage.title" :label="$strings.LabelMatchOnlyFillIfEmpty" small checkbox-bg="bg" class="mt-1" @input="setAltMergeMode('title', $event)" />
             <p v-if="mediaMetadata.title" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('title', mediaMetadata.title)">{{ mediaMetadata.title || '' }}</a>
             </p>
@@ -68,6 +69,7 @@
           <ui-checkbox v-model="selectedMatchUsage.subtitle" checkbox-bg="bg" @input="checkboxToggled" />
           <div class="grow ml-4">
             <ui-text-input-with-label v-model="selectedMatch.subtitle" :disabled="!selectedMatchUsage.subtitle" :label="$strings.LabelSubtitle" />
+            <ui-checkbox :value="isAltMergeMode('subtitle')" :disabled="!selectedMatchUsage.subtitle" :label="$strings.LabelMatchOnlyFillIfEmpty" small checkbox-bg="bg" class="mt-1" @input="setAltMergeMode('subtitle', $event)" />
             <p v-if="mediaMetadata.subtitle" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('subtitle', mediaMetadata.subtitle)">{{ mediaMetadata.subtitle }}</a>
             </p>
@@ -95,6 +97,7 @@
           <ui-checkbox v-model="selectedMatchUsage.description" checkbox-bg="bg" @input="checkboxToggled" />
           <div class="grow ml-4">
             <ui-rich-text-editor v-model="selectedMatch.description" :disabled="!selectedMatchUsage.description" :label="$strings.LabelDescription" />
+            <ui-checkbox :value="isAltMergeMode('description')" :disabled="!selectedMatchUsage.description" :label="$strings.LabelMatchOnlyFillIfEmpty" small checkbox-bg="bg" class="mt-1" @input="setAltMergeMode('description', $event)" />
             <p v-if="mediaMetadata.description" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('description', mediaMetadata.description)">{{ mediaMetadata.descriptionPlain.substr(0, 100) + (mediaMetadata.descriptionPlain.length > 100 ? '...' : '') }}</a>
             </p>
@@ -104,6 +107,7 @@
           <ui-checkbox v-model="selectedMatchUsage.publisher" checkbox-bg="bg" @input="checkboxToggled" />
           <div class="grow ml-4">
             <ui-text-input-with-label v-model="selectedMatch.publisher" :disabled="!selectedMatchUsage.publisher" :label="$strings.LabelPublisher" />
+            <ui-checkbox :value="isAltMergeMode('publisher')" :disabled="!selectedMatchUsage.publisher" :label="$strings.LabelMatchOnlyFillIfEmpty" small checkbox-bg="bg" class="mt-1" @input="setAltMergeMode('publisher', $event)" />
             <p v-if="mediaMetadata.publisher" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('publisher', mediaMetadata.publisher)">{{ mediaMetadata.publisher }}</a>
             </p>
@@ -132,6 +136,7 @@
           <ui-checkbox v-model="selectedMatchUsage.genres" checkbox-bg="bg" @input="checkboxToggled" />
           <div class="grow ml-4">
             <ui-multi-select v-model="selectedMatch.genres" :items="genres" :disabled="!selectedMatchUsage.genres" :label="$strings.LabelGenres" />
+            <ui-checkbox :value="isAltMergeMode('genres')" :disabled="!selectedMatchUsage.genres" :label="$strings.LabelMatchAddToExisting" small checkbox-bg="bg" class="mt-1" @input="setAltMergeMode('genres', $event)" />
             <p v-if="mediaMetadata.genres?.length" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('genres', mediaMetadata.genres)">{{ mediaMetadata.genres.join(', ') }}</a>
             </p>
@@ -141,6 +146,7 @@
           <ui-checkbox v-model="selectedMatchUsage.tags" checkbox-bg="bg" @input="checkboxToggled" />
           <div class="grow ml-4">
             <ui-multi-select v-model="selectedMatch.tags" :items="tags" :disabled="!selectedMatchUsage.tags" :label="$strings.LabelTags" />
+            <ui-checkbox :value="isAltMergeMode('tags')" :disabled="!selectedMatchUsage.tags" :label="$strings.LabelMatchAddToExisting" small checkbox-bg="bg" class="mt-1" @input="setAltMergeMode('tags', $event)" />
             <p v-if="media.tags?.length" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('tags', media.tags)">{{ media.tags.join(', ') }}</a>
             </p>
@@ -150,6 +156,7 @@
           <ui-checkbox v-model="selectedMatchUsage.language" checkbox-bg="bg" @input="checkboxToggled" />
           <div class="grow ml-4">
             <ui-text-input-with-label v-model="selectedMatch.language" :disabled="!selectedMatchUsage.language" :label="$strings.LabelLanguage" />
+            <ui-checkbox :value="isAltMergeMode('language')" :disabled="!selectedMatchUsage.language" :label="$strings.LabelMatchOnlyFillIfEmpty" small checkbox-bg="bg" class="mt-1" @input="setAltMergeMode('language', $event)" />
             <p v-if="mediaMetadata.language" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('language', mediaMetadata.language)">{{ mediaMetadata.language }}</a>
             </p>
@@ -236,6 +243,12 @@
 <script>
 import { merge, isEmpty, FIELD_CONFIG, TARGET_ROOT } from '@/utils/metadataMerge'
 
+function defaultMergeModes() {
+  const modes = {}
+  for (const field in FIELD_CONFIG) modes[field] = FIELD_CONFIG[field].default
+  return modes
+}
+
 export default {
   props: {
     processing: Boolean,
@@ -279,6 +292,8 @@ export default {
         feedUrl: true,
         releaseDate: true
       },
+      // Chosen merge logic per merge field (utils/metadataMerge). Kept out of selectedMatchUsage on purpose
+      selectedMatchMergeModes: defaultMergeModes(),
       selectAll: true
     }
   },
@@ -376,12 +391,42 @@ export default {
       const modes = {}
       for (const field in FIELD_CONFIG) {
         existing[field] = field === 'tags' ? this.media.tags : this.mediaMetadata[field]
-        if (this.selectedMatchUsage[field]) modes[field] = 'replace'
+        if (this.selectedMatchUsage[field]) modes[field] = this.selectedMatchMergeModes[field]
       }
       return merge(existing, this.selectedMatch, modes)
     }
   },
   methods: {
+    /** The field's non-default merge logic: fillEmpty for text, appendUnique for lists */
+    altMergeMode(field) {
+      const config = FIELD_CONFIG[field]
+      return config.allowed.find((mode) => mode !== config.default)
+    },
+    isAltMergeMode(field) {
+      return this.selectedMatchMergeModes[field] === this.altMergeMode(field)
+    },
+    setAltMergeMode(field, enabled) {
+      this.selectedMatchMergeModes[field] = enabled ? this.altMergeMode(field) : FIELD_CONFIG[field].default
+    },
+    initSelectedMatchMergeModes() {
+      this.selectedMatchMergeModes = defaultMergeModes()
+
+      // Load saved merge modes from local storage. Unknown fields and modes a field does not allow are ignored
+      try {
+        let savedMergeModes = localStorage.getItem('selectedMatchMergeModes')
+        if (!savedMergeModes) return
+        savedMergeModes = JSON.parse(savedMergeModes)
+        if (!savedMergeModes || typeof savedMergeModes !== 'object') return
+
+        for (const field in savedMergeModes) {
+          if (FIELD_CONFIG[field]?.allowed.includes(savedMergeModes[field])) {
+            this.selectedMatchMergeModes[field] = savedMergeModes[field]
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load saved selectedMatchMergeModes', error)
+      }
+    },
     setMatchFieldValue(field, value) {
       if (Array.isArray(value)) {
         this.selectedMatch[field] = [...value]
@@ -526,6 +571,7 @@ export default {
     init() {
       this.clearSelectedMatch()
       this.initSelectedMatchUsage()
+      this.initSelectedMatchMergeModes()
 
       if (this.libraryItem.id !== this.libraryItemId) {
         this.searchResults = []
@@ -655,6 +701,11 @@ export default {
 
       // Persist in local storage
       localStorage.setItem('selectedMatchUsage', JSON.stringify(this.selectedMatchUsage))
+      try {
+        localStorage.setItem('selectedMatchMergeModes', JSON.stringify(this.selectedMatchMergeModes))
+      } catch (error) {
+        console.error('Failed to save selectedMatchMergeModes', error)
+      }
 
       if (Object.keys(updatePayload).length) {
         if (updatePayload.metadata.cover) {
