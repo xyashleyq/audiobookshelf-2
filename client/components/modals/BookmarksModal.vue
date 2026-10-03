@@ -30,6 +30,10 @@
           </div>
         </form>
       </div>
+
+      <div class="w-full border-t border-white/10 px-4 py-2 flex justify-end">
+        <ui-btn :disabled="!libraryItemBookmarks.length" @click="exportBookmarks">{{ $strings.ButtonExportBookmarks }}</ui-btn>
+      </div>
     </div>
   </modals-modal>
 </template>
@@ -45,6 +49,10 @@ export default {
     currentTime: {
       type: Number,
       default: 0
+    },
+    bookTitle: {
+      type: String,
+      default: ''
     },
     libraryItemId: String,
     playbackRate: Number,
@@ -74,6 +82,9 @@ export default {
       set(val) {
         this.$emit('input', val)
       }
+    },
+    libraryItemBookmarks() {
+      return this.bookmarks.filter((bm) => !this.libraryItemId || bm.libraryItemId === this.libraryItemId)
     },
     canCreateBookmark() {
       return !this.bookmarks.find((bm) => Math.abs(this.currentTime - bm.time) < 1)
@@ -128,6 +139,25 @@ export default {
       this.showBookmarkTitleInput = false
 
       this.show = false
+    },
+    exportBookmarks() {
+      const payload = {
+        absBookmarksVersion: 1,
+        libraryItemId: this.libraryItemId,
+        bookTitle: this.bookTitle || null,
+        exportedAt: Date.now(),
+        // Raw stored time in book seconds. Never divide by playbackRate here.
+        bookmarks: this.libraryItemBookmarks.map((bm) => ({ time: bm.time, title: bm.title, createdAt: bm.createdAt }))
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `bookmarks-${this.libraryItemId}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
     }
   }
 }
