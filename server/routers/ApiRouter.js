@@ -175,6 +175,7 @@ class ApiRouter {
     this.router.delete('/me/sessions/:id', MeController.deleteSession.bind(this))
     this.router.get('/me/progress', MeController.getAllMediaProgress.bind(this))
     this.router.get('/me/bookmarks', MeController.getAllBookmarks.bind(this))
+    this.router.get('/me/bookmarks/search', MeController.searchBookmarks.bind(this)) // must precede /me/bookmarks/:libraryItemId
     this.router.get('/me/bookmarks/:libraryItemId', MeController.getBookmarksForLibraryItem.bind(this))
     this.router.get('/me/listening-sessions', MeController.getListeningSessions.bind(this))
     this.router.get('/me/item/listening-sessions/:libraryItemId/:episodeId?', MeController.getItemListeningSessions.bind(this))
