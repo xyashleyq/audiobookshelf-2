@@ -63,6 +63,7 @@
             <p v-if="mediaMetadata.title" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('title', mediaMetadata.title)">{{ mediaMetadata.title || '' }}</a>
             </p>
+            <p v-if="selectedMatchUsage.title && mergeResults.title" class="text-xs ml-1 text-white/60">{{ $strings.LabelMatchResult }} {{ mergeResultText('title') }}</p>
           </div>
         </div>
         <div v-if="selectedMatchOrig.subtitle" class="flex items-center py-2">
@@ -73,6 +74,7 @@
             <p v-if="mediaMetadata.subtitle" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('subtitle', mediaMetadata.subtitle)">{{ mediaMetadata.subtitle }}</a>
             </p>
+            <p v-if="selectedMatchUsage.subtitle && mergeResults.subtitle" class="text-xs ml-1 text-white/60">{{ $strings.LabelMatchResult }} {{ mergeResultText('subtitle') }}</p>
           </div>
         </div>
         <div v-if="selectedMatchOrig.author" class="flex items-center py-2">
@@ -101,6 +103,7 @@
             <p v-if="mediaMetadata.description" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('description', mediaMetadata.description)">{{ mediaMetadata.descriptionPlain.substr(0, 100) + (mediaMetadata.descriptionPlain.length > 100 ? '...' : '') }}</a>
             </p>
+            <p v-if="selectedMatchUsage.description && mergeResults.description" class="text-xs ml-1 text-white/60">{{ $strings.LabelMatchResult }} {{ mergeResultText('description') }}</p>
           </div>
         </div>
         <div v-if="selectedMatchOrig.publisher" class="flex items-center py-2">
@@ -111,6 +114,7 @@
             <p v-if="mediaMetadata.publisher" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('publisher', mediaMetadata.publisher)">{{ mediaMetadata.publisher }}</a>
             </p>
+            <p v-if="selectedMatchUsage.publisher && mergeResults.publisher" class="text-xs ml-1 text-white/60">{{ $strings.LabelMatchResult }} {{ mergeResultText('publisher') }}</p>
           </div>
         </div>
         <div v-if="selectedMatchOrig.publishedYear" class="flex items-center py-2">
@@ -140,6 +144,7 @@
             <p v-if="mediaMetadata.genres?.length" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('genres', mediaMetadata.genres)">{{ mediaMetadata.genres.join(', ') }}</a>
             </p>
+            <p v-if="selectedMatchUsage.genres && mergeResults.genres" class="text-xs ml-1 text-white/60">{{ $strings.LabelMatchResult }} {{ mergeResultText('genres') }}</p>
           </div>
         </div>
         <div v-if="selectedMatchOrig.tags" class="flex items-center py-2">
@@ -150,6 +155,7 @@
             <p v-if="media.tags?.length" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('tags', media.tags)">{{ media.tags.join(', ') }}</a>
             </p>
+            <p v-if="selectedMatchUsage.tags && mergeResults.tags" class="text-xs ml-1 text-white/60">{{ $strings.LabelMatchResult }} {{ mergeResultText('tags') }}</p>
           </div>
         </div>
         <div v-if="selectedMatchOrig.language" class="flex items-center py-2">
@@ -160,6 +166,7 @@
             <p v-if="mediaMetadata.language" class="text-xs ml-1 text-white/60">
               {{ $strings.LabelCurrently }} <a :title="$strings.LabelClickToUseCurrentValue" class="cursor-pointer hover:underline" @click.stop="setMatchFieldValue('language', mediaMetadata.language)">{{ mediaMetadata.language }}</a>
             </p>
+            <p v-if="selectedMatchUsage.language && mergeResults.language" class="text-xs ml-1 text-white/60">{{ $strings.LabelMatchResult }} {{ mergeResultText('language') }}</p>
           </div>
         </div>
         <div v-if="selectedMatchOrig.isbn" class="flex items-center py-2">
@@ -241,7 +248,7 @@
 </template>
 
 <script>
-import { merge, isEmpty, FIELD_CONFIG, TARGET_ROOT } from '@/utils/metadataMerge'
+import { merge, isEmpty, FIELD_CONFIG, TARGET_ROOT, LIST } from '@/utils/metadataMerge'
 
 function defaultMergeModes() {
   const modes = {}
@@ -426,6 +433,24 @@ export default {
       } catch (error) {
         console.error('Failed to load saved selectedMatchMergeModes', error)
       }
+    },
+    /** Preview text for the Result line, from the same mergeResults as the payload */
+    mergeResultText(field) {
+      const result = this.mergeResults[field]
+      if (!result) return ''
+      let text
+      if (FIELD_CONFIG[field].type === LIST) {
+        text = Array.isArray(result.value) ? result.value.join(', ') : ''
+      } else {
+        text = result.value == null ? '' : String(result.value)
+      }
+      if (field === 'description' && text) {
+        // Plain text, first 100 chars, like the "Currently" line
+        const plain = new DOMParser().parseFromString(text, 'text/html').body.textContent || ''
+        text = plain.substr(0, 100) + (plain.length > 100 ? '...' : '')
+      }
+      if (!text.trim()) text = this.$strings.LabelMatchEmpty
+      return result.changed ? text : `${text} ${this.$strings.LabelMatchNoChange}`
     },
     setMatchFieldValue(field, value) {
       if (Array.isArray(value)) {
