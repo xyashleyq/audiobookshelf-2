@@ -183,6 +183,7 @@ class MeController {
     return libraryItem
   }
   
+  /*
    * GET: /api/me/bookmarks/search
    * Search the user's book bookmarks across all accessible books
    *
