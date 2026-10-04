@@ -9,6 +9,7 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "strict": true,
+    "alwaysStrict": false,
     "skipLibCheck": true,
     "noEmitOnError": true,
     "incremental": true,
