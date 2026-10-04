@@ -12,6 +12,8 @@ module.exports = (function () {
       let probeData = []
       let errData = []
 
+      let exitCode = null
+
       proc.stdout.setEncoding('utf8')
       proc.stderr.setEncoding('utf8')
 

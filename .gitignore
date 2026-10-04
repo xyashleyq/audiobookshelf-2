@@ -19,6 +19,8 @@
 /ffprobe*
 /unicode*
 /libnusqlite3*
+/handoffs
+G*.txt
 
 sw.*
 .DS_STORE

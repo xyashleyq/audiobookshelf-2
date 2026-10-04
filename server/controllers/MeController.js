@@ -6,6 +6,7 @@ const Database = require('../Database')
 const { sort } = require('../libs/fastSort')
 const { toNumber, isNullOrNaN, isUUID } = require('../utils/index')
 const userStats = require('../utils/queries/userStats')
+const bookmarkQueries = require('../utils/queries/bookmarkQueries')
 const parseUserAgent = require('../utils/parsers/parseUserAgent')
 const { parseBookmarkFile, diffBookmarks, applyBookmarkImport, selectBookmarksForItem } = require('../utils/bookmarkImport')
 
@@ -25,8 +26,8 @@ class MeController {
    * @param {RequestWithUser} req
    * @param {Response} res
    */
-  getCurrentUser(req, res) {
-    res.json(req.user.toOldJSONForBrowser())
+  async getCurrentUser(req, res) {
+    res.json(await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
   }
 
   /**
@@ -121,9 +122,10 @@ class MeController {
    * @param {RequestWithUser} req
    * @param {Response} res
    */
-  getAllBookmarks(req, res) {
-    const bookmarks = req.user.bookmarks?.map((bookmark) => ({ ...bookmark })) || []
-    res.json({ bookmarks })
+  async getAllBookmarks(req, res) {
+    // Only bookmarks for items that still exist and the user can access (books and podcasts)
+    const { bookmarks } = await bookmarkQueries.getAccessibleBookmarks(req.user)
+    res.json({ bookmarks: bookmarks.map((bookmark) => ({ ...bookmark })) })
   }
 
   /**
@@ -179,6 +181,64 @@ class MeController {
     }
 
     return libraryItem
+  }
+  
+   * GET: /api/me/bookmarks/search
+   * Search the user's book bookmarks across all accessible books
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async searchBookmarks(req, res) {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : ''
+    const filterLibraryItemId = typeof req.query.libraryItemId === 'string' && req.query.libraryItemId ? req.query.libraryItemId : null
+    const page = Math.max(0, toNumber(req.query.page, 0))
+    const itemsPerPage = Math.min(100, Math.max(1, toNumber(req.query.itemsPerPage, 25)))
+
+    const { bookmarks, libraryItemsById } = await bookmarkQueries.getAccessibleBookmarks(req.user, { mediaType: 'book' })
+
+    const getBookTitle = (libraryItem) => libraryItem.media.title ?? libraryItem.title
+    const bookIds = new Set(bookmarks.map((bm) => bm.libraryItemId))
+    const books = [...bookIds]
+      .map((libraryItemId) => ({ libraryItemId, title: getBookTitle(libraryItemsById.get(libraryItemId)) }))
+      .sort((a, b) => String(a.title ?? '').localeCompare(String(b.title ?? ''), undefined, { sensitivity: 'base' }) || a.libraryItemId.localeCompare(b.libraryItemId))
+
+    let matches = bookmarks
+    if (filterLibraryItemId) {
+      matches = matches.filter((bm) => bm.libraryItemId === filterLibraryItemId)
+    }
+    if (q) {
+      // Literal match only, never build a RegExp or SQL LIKE from user input
+      matches = matches.filter((bm) => String(bm.title ?? '').toLowerCase().includes(q))
+    }
+
+    const total = matches.length
+    matches = [...matches].sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return (b.createdAt || 0) - (a.createdAt || 0)
+      if (a.libraryItemId !== b.libraryItemId) return a.libraryItemId < b.libraryItemId ? -1 : 1
+      return Number(a.time) - Number(b.time)
+    })
+
+    const results = matches.slice(page * itemsPerPage, (page + 1) * itemsPerPage).map((bm) => {
+      const libraryItem = libraryItemsById.get(bm.libraryItemId)
+      return {
+        libraryItemId: bm.libraryItemId,
+        time: Number(bm.time),
+        title: bm.title,
+        createdAt: bm.createdAt,
+        libraryId: libraryItem.libraryId,
+        bookTitle: getBookTitle(libraryItem)
+      }
+    })
+
+    res.json({
+      results,
+      books,
+      total,
+      numPages: Math.ceil(total / itemsPerPage),
+      page,
+      itemsPerPage
+    })
   }
 
   /**
@@ -296,7 +356,7 @@ class MeController {
     await Database.mediaProgressModel.removeById(req.params.id)
     req.user.mediaProgresses = req.user.mediaProgresses.filter((mp) => mp.id !== req.params.id)
 
-    SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     res.sendStatus(200)
   }
 
@@ -318,7 +378,7 @@ class MeController {
       return res.status(mediaProgressResponse.statusCode || 400).send(mediaProgressResponse.error)
     }
 
-    SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     res.sendStatus(200)
   }
 
@@ -347,7 +407,7 @@ class MeController {
     }
 
     if (hasUpdated) {
-      SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+      SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     }
 
     res.sendStatus(200)
@@ -382,7 +442,7 @@ class MeController {
     }
 
     const bookmark = await req.user.createBookmark(req.params.id, time, title)
-    SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     res.json(bookmark)
   }
 
@@ -420,7 +480,7 @@ class MeController {
       return res.sendStatus(404)
     }
 
-    SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     res.json(bookmark)
   }
 
@@ -454,7 +514,7 @@ class MeController {
 
     await req.user.removeBookmark(req.params.id, time)
 
-    SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     res.sendStatus(200)
   }
 
@@ -641,9 +701,9 @@ class MeController {
 
     const hasUpdated = await req.user.addSeriesToHideFromContinueListening(req.params.id)
     if (hasUpdated) {
-      SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+      SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     }
-    res.json(req.user.toOldJSONForBrowser())
+    res.json(await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
   }
 
   /**
@@ -660,9 +720,9 @@ class MeController {
 
     const hasUpdated = await req.user.removeSeriesFromHideFromContinueListening(req.params.id)
     if (hasUpdated) {
-      SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+      SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     }
-    res.json(req.user.toOldJSONForBrowser())
+    res.json(await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
   }
 
   /**
@@ -679,15 +739,15 @@ class MeController {
 
     // Already hidden
     if (mediaProgress.hideFromContinueListening) {
-      return res.json(req.user.toOldJSONForBrowser())
+      return res.json(await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     }
 
     mediaProgress.hideFromContinueListening = true
     await mediaProgress.save()
 
-    SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+    SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
 
-    res.json(req.user.toOldJSONForBrowser())
+    res.json(await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
   }
 
   /**

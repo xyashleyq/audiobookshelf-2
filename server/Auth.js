@@ -94,9 +94,11 @@ class Auth {
    * @returns {Promise<Object>} jsonPayload
    */
   async getUserLoginResponsePayload(user) {
+    // Required lazily: Database requires Auth, so a top-level require here could capture a partially loaded Database
+    const bookmarkQueries = require('./utils/queries/bookmarkQueries')
     const libraryIds = await Database.libraryModel.getAllLibraryIds()
     return {
-      user: user.toOldJSONForBrowser(),
+      user: await bookmarkQueries.toOldJSONForBrowserForSelf(user),
       userDefaultLibraryId: user.getDefaultLibraryId(libraryIds),
       serverSettings: Database.serverSettings.toJSONForBrowser(),
       ereaderDevices: Database.emailSettings.getEReaderDevices(user),
