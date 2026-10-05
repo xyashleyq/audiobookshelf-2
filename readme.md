@@ -73,9 +73,12 @@ Open http://localhost:13378, create an admin account, then create a book library
   - Case-insensitive comparison is only used to skip duplicates in "Add to existing". A case-only change (e.g. "penguin" → "Penguin") is still treated as different and is saved.
   - An empty value from the provider never replaces an existing value.
   - Numbers from the provider are saved as strings.
+  - Replace now also trims text and drops empty list items, instead of saving them as they were
+  - If there is nothing to be sent, the form shows "No updates necessary", sends no request, and stays open.
 - What remains:
-  - Other fields (cover, authors, ISBN, etc.) have no merge option and are unchanged.
+  - Other fields (cover, authors, ISBN, etc.) have no merge option and are saved as before, even if they did not change.
   - New labels are only in English.
+  - Match.vue has no automated tests
   - Field checkbox memory saved in localStorage has no try/catch. This is old code outside the RFC.
 
 
