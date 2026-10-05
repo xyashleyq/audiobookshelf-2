@@ -6,6 +6,11 @@
 
 [tbd]
 
+### Running the tests
+
+* Server tests: from the repository root, run `npm test` (Node 20). It compiles the server and runs the mocha tests in `dist-server/test`. All tests should pass.
+* Client tests: run `cd client && npm test` (Node 20, requires Chrome). All specs should pass.
+
 ## New Features added and how to check them:
 
 ### New Feature 1 - Search bookmarks:
@@ -18,6 +23,13 @@
 ### New Feature 2 - [export import]
 
 ### New Feature 3 - [merge]
+
+1. Open a book that already has a publisher and genres, then go to the Match tab, search, and pick a result with a publisher and genres.
+2. Under Publisher, tick “Only fill if empty”. Under Genres, tick “Add to existing”.
+3. Check the “Result”:
+  * Publisher shows your current value with “(no change)”.
+  * Genres shows your current genres followed by the new ones, without duplicates.
+4. Click Submit. The Details tab then shows the same values as the Result lines. Other checked fields still use Replace as before.
 
 ## Infividual Components:
 
@@ -39,3 +51,22 @@
 ### 02
 
 ### 03
+
+- The changes:
+  - New merge module `client/utils/metadataMerge.js` with three merge logics: replace, fill if empty, add to existing.
+  - Match tab: an "Only fill if empty" checkbox for title, subtitle, description, publisher and language, an "Add to existing" checkbox for genres and tags, and a result preview for each of these fields.
+  - Unchanged fields are not sent, and if nothing changed, no request is sent.
+- The results of the checks:
+  - Unit tests: all 40 tests pass for the merge module.
+  - Script check: across all checkbox combinations, the preview always matches what is sent.
+  - Manual tests: the saved values match the preview, unchecked fields stay unchanged, Cancel does nothing, and a failed save shows an error.
+- What changes from the RFC:
+  - Case-insensitive comparison is only used to skip duplicates in "Add to existing". A case-only change (e.g. "penguin" → "Penguin") is still treated as different and is saved.
+  - An empty value from the provider never replaces an existing value.
+  - Numbers from the provider are saved as strings.
+- What remains:
+  - Other fields (cover, authors, ISBN, etc.) have no merge option and are unchanged.
+  - New labels are only in English.
+  - Field checkbox memory saved in localStorage has no try/catch. This is old code outside the RFC.
+
+
