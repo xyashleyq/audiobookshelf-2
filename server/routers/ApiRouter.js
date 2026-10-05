@@ -188,6 +188,8 @@ class ApiRouter {
     this.router.post('/me/item/:id/bookmark', MeController.createBookmark.bind(this))
     this.router.patch('/me/item/:id/bookmark', MeController.updateBookmark.bind(this))
     this.router.delete('/me/item/:id/bookmark/:time', MeController.removeBookmark.bind(this))
+    this.router.post('/me/item/:libraryItemId/bookmarks/import/preview', MeController.previewBookmarkImport.bind(this))
+    this.router.post('/me/item/:libraryItemId/bookmarks/import', MeController.importBookmarks.bind(this))
     this.router.patch('/me/password', this.auth.authRateLimiter, MeController.updatePassword.bind(this))
     this.router.get('/me/items-in-progress', MeController.getAllLibraryItemsInProgress.bind(this))
     this.router.get('/me/series/:id/remove-from-continue-listening', MeController.removeSeriesFromContinueListening.bind(this))
