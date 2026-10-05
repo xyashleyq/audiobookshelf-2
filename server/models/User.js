@@ -7,6 +7,8 @@ const SocketAuthority = require('../SocketAuthority')
 const { isNullOrNaN } = require('../utils')
 const TokenManager = require('../auth/TokenManager')
 
+const bookmarkUtils = require('../utils/bookmarkUtils')
+
 class UserCache {
   constructor() {
     this.cache = new LRUCache({ max: 100 })
@@ -839,7 +841,7 @@ class User extends Model {
    * @returns {AudioBookmarkObject|null}
    */
   findBookmark(libraryItemId, time) {
-    return this.bookmarks.find((bm) => bm.libraryItemId === libraryItemId && bm.time == time)
+    return bookmarkUtils.findBookmark(this.bookmarks, libraryItemId, time)
   }
 
   /**
@@ -851,27 +853,17 @@ class User extends Model {
    * @returns {Promise<AudioBookmarkObject>}
    */
   async createBookmark(libraryItemId, time, title) {
-    const existingBookmark = this.findBookmark(libraryItemId, time)
-    if (existingBookmark) {
+    // Same code path as bookmark import: add, or update the title if one exists at this time
+    const { bookmarks, summary } = bookmarkUtils.applyBookmarkChanges(this.bookmarks, libraryItemId, [{ time, title, createdAt: null }], 'replace')
+    if (!summary.added) {
       Logger.warn('[User] Create Bookmark already exists for this time')
-      if (existingBookmark.title !== title) {
-        existingBookmark.title = title
-        this.changed('bookmarks', true)
-        await this.save()
-      }
-      return existingBookmark
     }
-
-    const newBookmark = {
-      libraryItemId,
-      time,
-      title,
-      createdAt: Date.now()
+    if (summary.changed) {
+      this.bookmarks = bookmarks
+      this.changed('bookmarks', true)
+      await this.save()
     }
-    this.bookmarks.push(newBookmark)
-    this.changed('bookmarks', true)
-    await this.save()
-    return newBookmark
+    return bookmarkUtils.findBookmark(this.bookmarks, libraryItemId, time)
   }
 
   /**
@@ -906,7 +898,7 @@ class User extends Model {
       Logger.error(`[User] removeBookmark not found`)
       return false
     }
-    this.bookmarks = this.bookmarks.filter((bm) => bm.libraryItemId !== libraryItemId || bm.time !== time)
+    this.bookmarks = this.bookmarks.filter((bm) => !bookmarkUtils.isSameBookmark(bm, libraryItemId, time))
     this.changed('bookmarks', true)
     await this.save()
     return true

@@ -2,6 +2,7 @@ const { expect } = require('chai')
 const sinon = require('sinon')
 const Database = require('../../../server/Database')
 const Logger = require('../../../server/Logger')
+const bookmarkQueries = require('../../../server/utils/queries/bookmarkQueries')
 const SocketAuthority = require('../../../server/SocketAuthority')
 const MeController = require('../../../server/controllers/MeController')
 
@@ -83,6 +84,7 @@ describe('MeController bookmark import', () => {
     for (const method of ['debug', 'info', 'warn', 'error']) {
       if (typeof Logger[method] === 'function') loggerStubs.push(sinon.stub(Logger, method))
     }
+    sinon.stub(bookmarkQueries, 'toOldJSONForBrowserForSelf').resolves({ id: 'user_1' })
   })
 
   afterEach(() => {
@@ -174,7 +176,35 @@ describe('MeController bookmark import', () => {
     })
   })
 
-    describe('importBookmarks', () => {
+  describe('access rule is shared by every bookmark endpoint', () => {
+    const calls = () => [
+      ['getBookmarksForLibraryItem', { libraryItemId: 'li_1' }, {}],
+      ['createBookmark', { id: 'li_1' }, { time: 1, title: 'x' }],
+      ['updateBookmark', { id: 'li_1' }, { time: 1, title: 'x' }],
+      ['removeBookmark', { id: 'li_1', time: '1' }, {}],
+      ['previewBookmarkImport', { libraryItemId: 'li_1' }, { file: fileOf([]) }],
+      ['importBookmarks', { libraryItemId: 'li_1' }, { file: fileOf([]), mode: 'keep' }]
+    ]
+
+    it('all return 404 for a missing item', async () => {
+      getExpandedById.resolves(null)
+      for (const [name, params, body] of calls()) {
+        const res = makeRes()
+        await MeController[name]({ params, body, user: makeUser([]) }, res)
+        expect(res.statusCode, name).to.equal(404)
+      }
+    })
+
+    it('all return 403 without access', async () => {
+      for (const [name, params, body] of calls()) {
+        const res = makeRes()
+        await MeController[name]({ params, body, user: makeUser([], { canAccess: false }) }, res)
+        expect(res.statusCode, name).to.equal(403)
+      }
+    })
+  })
+
+  describe('importBookmarks', () => {
     const importFile = () => fileOf([{ time: 5, title: 'fresh', createdAt: 50 }, { time: 10, title: 'A' }, { time: 20, title: 'Changed' }])
 
     async function runImport(user, body) {

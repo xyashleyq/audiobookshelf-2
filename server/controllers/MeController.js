@@ -129,51 +129,47 @@ class MeController {
   }
 
   /**
-   * GET: /api/me/bookmarks/:libraryItemId
-   *
-   * @param {RequestWithUser} req
-   * @param {Response} res
-   */
-  async getBookmarksForLibraryItem(req, res) {
-    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.libraryItemId)
-    if (!libraryItem) {
-      return res.sendStatus(404)
-    }
-
-    if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
-      Logger.error(`[MeController] User "${req.user.username}" attempted to access bookmarks for library item "${req.params.libraryItemId}" without access`)
-      return res.sendStatus(403)
-    }
-
-    const bookmarks = req.user.bookmarks?.filter((bookmark) => bookmark.libraryItemId === libraryItem.id).map((bookmark) => ({ ...bookmark })) || []
-    res.json({ bookmarks })
-  }
-
-  /**
-   * Shared by the bookmark import preview and import handlers.
-   * Same lookup + access check as getBookmarksForLibraryItem.
-   * Sends the error response itself and returns null when the request can't proceed.
+   * The single lookup + access check for every per-book bookmark endpoint
+   * (get, create, update, remove, import preview, import).
+   * Sends the 404/403 itself and returns null when the request can't proceed.
    *
    * Static because route handlers are bound to the ApiRouter instance, so `this`
-   * is not the controller. Call it as MeController.getLibraryItemForBookmarkImport(...).
+   * is not the controller. Call it as MeController.getAccessibleLibraryItem(...).
    *
    * @param {RequestWithUser} req
    * @param {Response} res
-   * @param {string} action - for logging
+   * @param {string} libraryItemId
+   * @param {string} action - used in the log line, e.g. "create bookmark"
    * @returns {Promise<import('../models/LibraryItem')|null>}
    */
-  static async getLibraryItemForBookmarkImport(req, res, action) {
-    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.libraryItemId)
+  static async getAccessibleLibraryItem(req, res, libraryItemId, action) {
+    const libraryItem = await Database.libraryItemModel.getExpandedById(libraryItemId)
     if (!libraryItem) {
       res.sendStatus(404)
       return null
     }
 
+    // Check if user has access to this library item
     if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
-      Logger.error(`[MeController] User "${req.user.username}" attempted to ${action} bookmarks for library item "${req.params.libraryItemId}" without access`)
+      Logger.error(`[MeController] User "${req.user.username}" attempted to ${action} for library item "${libraryItemId}" without access`)
       res.sendStatus(403)
       return null
     }
+
+    return libraryItem
+  }
+
+  /**
+   * Import endpoints: the same access check, plus books only.
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   * @param {string} action - used in the log line
+   * @returns {Promise<import('../models/LibraryItem')|null>}
+   */
+  static async getLibraryItemForBookmarkImport(req, res, action) {
+    const libraryItem = await MeController.getAccessibleLibraryItem(req, res, req.params.libraryItemId, action)
+    if (!libraryItem) return null
 
     if (libraryItem.isPodcast) {
       res.status(400).send('Bookmarks can only be imported into books')
@@ -182,7 +178,21 @@ class MeController {
 
     return libraryItem
   }
-  
+
+  /**
+   * GET: /api/me/bookmarks/:libraryItemId
+   *
+   * @param {RequestWithUser} req
+   * @param {Response} res
+   */
+  async getBookmarksForLibraryItem(req, res) {
+    const libraryItem = await MeController.getAccessibleLibraryItem(req, res, req.params.libraryItemId, 'access bookmarks')
+    if (!libraryItem) return
+
+    const bookmarks = req.user.bookmarks?.filter((bookmark) => bookmark.libraryItemId === libraryItem.id).map((bookmark) => ({ ...bookmark })) || []
+    res.json({ bookmarks })
+  }
+
   /*
    * GET: /api/me/bookmarks/search
    * Search the user's book bookmarks across all accessible books
@@ -421,16 +431,8 @@ class MeController {
    * @param {Response} res
    */
   async createBookmark(req, res) {
-    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.id)
-    if (!libraryItem) {
-      return res.sendStatus(404)
-    }
-
-    // Check if user has access to this library item
-    if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
-      Logger.error(`[MeController] User "${req.user.username}" attempted to create bookmark for library item "${req.params.id}" without access`)
-      return res.sendStatus(403)
-    }
+    const libraryItem = await MeController.getAccessibleLibraryItem(req, res, req.params.id, 'create bookmark')
+    if (!libraryItem) return
 
     const { time, title } = req.body
     if (isNullOrNaN(time)) {
@@ -454,16 +456,8 @@ class MeController {
    * @param {Response} res
    */
   async updateBookmark(req, res) {
-    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.id)
-    if (!libraryItem) {
-      return res.sendStatus(404)
-    }
-
-    // Check if user has access to this library item
-    if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
-      Logger.error(`[MeController] User "${req.user.username}" attempted to update bookmark for library item "${req.params.id}" without access`)
-      return res.sendStatus(403)
-    }
+    const libraryItem = await MeController.getAccessibleLibraryItem(req, res, req.params.id, 'update bookmark')
+    if (!libraryItem) return
 
     const { time, title } = req.body
     if (isNullOrNaN(time)) {
@@ -492,16 +486,8 @@ class MeController {
    * @param {Response} res
    */
   async removeBookmark(req, res) {
-    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.id)
-    if (!libraryItem) {
-      return res.sendStatus(404)
-    }
-
-    // Check if user has access to this library item
-    if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
-      Logger.error(`[MeController] User "${req.user.username}" attempted to remove bookmark for library item "${req.params.id}" without access`)
-      return res.sendStatus(403)
-    }
+    const libraryItem = await MeController.getAccessibleLibraryItem(req, res, req.params.id, 'remove bookmark')
+    if (!libraryItem) return
 
     const time = Number(req.params.time)
     if (isNaN(time)) {
@@ -527,7 +513,7 @@ class MeController {
    * @param {Response} res
    */
   async previewBookmarkImport(req, res) {
-    const libraryItem = await MeController.getLibraryItemForBookmarkImport(req, res, 'preview import of')
+    const libraryItem = await MeController.getLibraryItemForBookmarkImport(req, res, 'preview import of bookmarks')
     if (!libraryItem) return
 
     const parsed = parseBookmarkFile(req.body?.file)
@@ -547,7 +533,7 @@ class MeController {
    * @param {Response} res
    */
   async importBookmarks(req, res) {
-    const libraryItem = await MeController.getLibraryItemForBookmarkImport(req, res, 'import')
+    const libraryItem = await MeController.getLibraryItemForBookmarkImport(req, res, 'import bookmarks')
     if (!libraryItem) return
 
     const mode = req.body?.mode
@@ -580,7 +566,7 @@ class MeController {
     }
 
     if (summary.changed) {
-      SocketAuthority.clientEmitter(req.user.id, 'user_updated', req.user.toOldJSONForBrowser())
+      SocketAuthority.clientEmitter(req.user.id, 'user_updated', await bookmarkQueries.toOldJSONForBrowserForSelf(req.user))
     }
     res.json({
       summary,
