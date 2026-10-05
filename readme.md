@@ -36,8 +36,8 @@ Open http://localhost:13378, create an admin account, then create a book library
 1. Open a book that already has a publisher and genres, then go to the Match tab, search, and pick a result with a publisher and genres.
 2. Under Publisher, tick “Only fill if empty”. Under Genres, tick “Add to existing”.
 3. Check the “Result”:
-  * Publisher shows your current value with “(no change)”.
-  * Genres shows your current genres followed by the new ones, without duplicates.
+  - Publisher shows your current value with “(no change)”.
+  - Genres shows your current genres followed by the new ones, without duplicates.
 4. Click Submit. The Details tab then shows the same values as the Result lines. Other checked fields still use Replace as before.
 
 ## Infividual Components:
