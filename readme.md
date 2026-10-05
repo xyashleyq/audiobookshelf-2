@@ -85,22 +85,21 @@ Open http://localhost:13378, create an admin account, then create a book library
     - bad input rejected without writing
     - save failure, with and without a failing reload
     - 400, 403 and 404 handling
+  - Existing tests pass unmodified. New drift tests check create vs. import and the 404/403 rule across all six endpoints.
   - Manual testing in the dev container with two generated books covered everything under "How to check" above, plus bad files (missing version, negative time with empty title, string time, one good and one bad entry, empty list, duplicate times), cancel, re-picking the same file, persistence after a server restart, and create/rename/delete/jump on existing bookmarks.
   - Manual testing caught that the two routes had not been registered in `ApiRouter.js`, so the preview returned a 404. The controller tests missed it because they call the handlers directly. Fixed by registering the routes.
 - What changed from the RFC:
-  - The RFC had export reuse `GET /api/me/bookmarks/:libraryItemId`. Export now builds the file from the modal's existing `bookmarks` prop, filtered to the book, so it needs no extra request.
-  - The RFC left some details open, which I settled as follows:
-    - Validation is all-or-nothing, so one bad entry rejects the file.
-    - The import request requires an explicit `mode`.
-    - Replace keeps the existing bookmark's `createdAt`.
-    - Duplicate times within a file are reported to the user as ignored.
-    - Podcasts are rejected with a 400.
-  - The RFC planned a preview UI test, but the client has no unit-test setup in my part, so the client flow was verified manually only.
+  - The RFC said `User.js` and the existing bookmark handlers would stay untouched. They changed on purpose. Leaving them alone meant copying the "same bookmark" rule, the add-or-update rule and the access check into the new code, and copies can disagree.
+  - `findBookmark` used `==` and `removeBookmark` used `!==`, so a bookmark with a string time could be found but not removed. They now share one definition.
+  - `createBookmark` and import both run through `applyBookmarkChanges`. A test checks that creating and importing the same entry give the same stored result.
+  - All six per-book bookmark endpoints share one access check. The merge also exposed that `importBookmarks` was emitting an unfiltered user payload, bypassing the inaccessible-book filtering from the search feature. It now uses the same payload as every other handler.
+  - Still true from the RFC: `parseBookmarkFile`, `diffBookmarks` and `applyBookmarkImport` are exported from `bookmarkImport.js`, the endpoints and file format are unchanged, and the existing bookmark tests pass without edits.
 - What remains:
   - No automated test covers the client flow or the route registration. A Cypress component test for the preview panel would be a natural addition.
   - New strings exist in `en-us.json` only, so other languages still need translations.
   - Conflict resolution is one choice for the whole import, not per bookmark. Podcast episode bookmarks are not supported.
   - The existing Vue client is no longer accepting frontend PRs upstream, so the client half would need porting to the React rewrite.
+  - The client's `canCreateBookmark` still uses its own 1-second tolerance, and there is no test for route registration or the client flow.
 
 ### 03 Ashley Qian (github username: xyashleyq): Choose how matched metadata combines with existing values
 
