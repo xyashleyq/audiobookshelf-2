@@ -4,7 +4,16 @@
 
 ## How to Run AudioBookshelf:
 
-[tbd]
+Needs **Node 20**. From the repo root:
+
+```bash
+npm ci
+cd client && npm ci && npm run generate && cd ..
+npm run build:server
+PORT=13378 node dist-server/index.js
+```
+
+Open http://localhost:13378, create an admin account, then create a book library. Some functions and downloads need internet access.
 
 ### Running the tests
 
@@ -50,7 +59,7 @@
 
 ### 02
 
-### 03
+### 03 Ashley Qian (github username: xyashleyq): Choose how matched metadata combines with existing values
 
 - The changes:
   - New merge module `client/utils/metadataMerge.js` with three merge logics: replace, fill if empty, add to existing.
