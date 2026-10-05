@@ -1,7 +1,5 @@
 # Team 2: AudioBookshelf-2
 
-[A short README that says how to run the combined version and how to check it. For each student it gives the change, the results of the checks, what changed from the RFC, and what remains. Your fork is public, so you may identify yourselves by GitHub username.]
-
 ## How to Run AudioBookshelf:
 
 Needs **Node 20**. From the repo root:
@@ -17,8 +15,8 @@ Open http://localhost:13378, create an admin account, then create a book library
 
 ### Running the tests
 
-* Server tests: from the repository root, run `npm test` (Node 20). It compiles the server and runs the mocha tests in `dist-server/test`. All tests should pass.
-* Client tests: run `cd client && npm test` (Node 20, requires Chrome). All specs should pass.
+- Server tests: from the repository root, run `npm test` (Node 20). It compiles the server and runs the mocha tests in `dist-server/test`. All tests should pass.
+- Client tests: run `cd client && npm test` (Node 20, requires Chrome). All specs should pass.
 
 ## New Features added and how to check them:
 
@@ -45,26 +43,28 @@ Open http://localhost:13378, create an admin account, then create a book library
 1. Open a book that already has a publisher and genres, then go to the Match tab, search, and pick a result with a publisher and genres.
 2. Under Publisher, tick “Only fill if empty”. Under Genres, tick “Add to existing”.
 3. Check the “Result”:
-  - Publisher shows your current value with “(no change)”.
-  - Genres shows your current genres followed by the new ones, without duplicates.
+
+- Publisher shows your current value with “(no change)”.
+- Genres shows your current genres followed by the new ones, without duplicates.
+
 4. Click Submit. The Details tab then shows the same values as the Result lines. Other checked fields still use Replace as before.
 
-## Infividual Components:
+## Individual Components:
 
 ### 01 Ying Wong (github username: wqying): Search bookmarks across my audiobooks
 
 - The changes:
-  - New "Bookmarks" page in the sidebar that searches bookmark notes across every book, with a per-book filter, paging, and click-to-play at the bookmarked time.
-  - New API endpoint for search, so all search related logic is run on the server, only one page of results will reach the client.
-  - Bookmarks for inaccessible books are now filtered out on the server.
+  - New "Bookmarks" page in the sidebar (`client/pages/bookmarks.vue`, `client/components/app/SideRail.vue`) that searches bookmark notes across every book, with a per-book filter, paging, and click-to-play at the bookmarked time.
+  - New API endpoint for search (`server/controllers/MeController.js`, `server/routers/ApiRouter.js`), so all search related logic is run on the server, only one page of results will reach the client.
+  - Bookmarks for inaccessible books are now filtered out on the server (`server/utils/queries/bookmarkQueries.js`).
 - The results of the checks:
-  - Server tests in MeController.test.js cover search, access rules, paging, special characters and the user payloads.
-  - Cypress component test for the read-only BookmarkItem for UI.
-  - Manual test caught a bug where the Play button did nothing in the "Bookmarks" page, fixed with @click.stop by following how the existing Play logic does it.
+  - Server tests in `test/server/controllers/MeController.test.js` cover search, access rules, paging, special characters and the user payloads.
+  - Cypress component test (`client/cypress/tests/components/modals/bookmarks/BookmarkItem.cy.js`) for the read-only BookmarkItem (`client/components/modals/bookmarks/BookmarkItem.vue`) for UI.
+  - Manual test caught a bug where the Play button did nothing in the "Bookmarks" page, fixed with @click.stop (`client/pages/bookmarks.vue`) by following how the existing Play logic does it.
 - What changes from the RFC:
-  - My original RFC didn't address the leaking GET /api/me/bookmarks, and left the login payload as a judgement call. During implementation, this is fixed, which means existing responses change for users who have lost access to a book.
+  - My original RFC didn't address the leaking `GET /api/me/bookmarks` (`server/controllers/MeController.js`), and left the login payload (`server/Auth.js`) as a judgement call. During implementation, this is fixed, which means existing responses change for users who have lost access to a book.
 - What remains:
-  - Podcast bookmarks are still unsupported, because they need a migration. Other languages also still need translations of the new strings.
+  - Podcast bookmarks are still unsupported, because they need a migration. Other languages also still need translations of the new strings (`client/strings/en-us.json`).
 
 ### 02 Elaine Ulsh (github username: ElaineUlsh): Export and import an audiobook's bookmarks
 
